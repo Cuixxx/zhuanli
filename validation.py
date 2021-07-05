@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import cv2
 from torchvision import  transforms
 from sklearn import decomposition
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 
 parser = argparse.ArgumentParser(description='Deep Hashing evaluate mAP')
 parser.add_argument('--pretrained', type=float, default=1, metavar='pretrained_model',
@@ -101,7 +102,10 @@ def evaluate(trn_binary, trn_label, tst_binary, tst_label, K=10):
     # tst_binary = np.concatenate((tst_binary[0], tst_binary[1], tst_binary[2]), axis=0)
     # tst_label = np.concatenate((tst_label[0], tst_label[1], tst_label[2]), axis=0)
 
-
+    trn_binary = trn_binary[1]
+    trn_label = trn_label[1]
+    tst_binary = tst_binary[1]
+    tst_label = tst_label[1]
 
     # for i in range(classes):
     #     if i == 0:
@@ -113,6 +117,7 @@ def evaluate(trn_binary, trn_label, tst_binary, tst_label, K=10):
     #         tst_sample_label = np.concatenate([tst_sample_label, np.array([i]).repeat(100)])
     tst_sample_binary = tst_binary
     tst_sample_label = tst_label
+
     query_times = tst_sample_binary.shape[0]#10*100
     trainset_len = trn_binary.shape[0]#50000
     AP = np.zeros(query_times)#一次检索一个AP
@@ -155,26 +160,30 @@ def evaluate(trn_binary, trn_label, tst_binary, tst_label, K=10):
     # plt.savefig('./fig1.png', dpi=300)
     # plt.show()
 
-    # index = [1000, 5000, 10000, 12000, 18000]
-    # index = [i - 1 for i in index]
-    # print('precision at k:', precision_at_k[index])
-    # print('precision within Hamming radius 2:', np.mean(precision_radius))
+    index = [1000, 5000, 10000, 12000, 18000]
+    index = [i - 1 for i in index]
+    print('precision at k:', precision_at_k[index])
+    print('precision within Hamming radius 2:', np.mean(precision_radius))
     map = np.mean(AP)
     print('mAP:', map)
     # print('Total query time:', time.time() - total_time_start)
 
 def visulization(val_vector,val_label):
+    lda = LinearDiscriminantAnalysis(n_components=2)
+
     pca = decomposition.PCA(n_components=2)
-    vectors = torch.cat((val_vector[0], val_vector[1],val_vector[2]), dim=0).cpu().detach()
+    vectors = torch.cat((val_vector[0], val_vector[1], val_vector[2]), dim=0).cpu().detach()
+    labels = torch.cat((val_label[0], val_label[1], val_label[2]), dim=0).cpu().detach()
     pca.fit(vectors)
+    lda.fit(vectors, labels)
     # pca.fit(val_vector[2].cpu().detach())
-    vector1 = pca.transform(val_vector[0].cpu().detach())
-    vector2 = pca.transform(val_vector[1].cpu().detach())
-    vector3 = pca.transform(val_vector[2].cpu().detach())
+    vector1 = lda.transform(val_vector[0].cpu().detach())
+    vector2 = lda.transform(val_vector[1].cpu().detach())
+    vector3 = lda.transform(val_vector[2].cpu().detach())
     plt.scatter(vector1[:, 0], vector1[:, 1], marker='o', c=val_label[0])
-    # plt.show()
+    plt.show()
     plt.scatter(vector2[:, 0], vector2[:, 1], marker='*', c=val_label[1])
-    # plt.show()
+    plt.show()
     plt.scatter(vector3[:, 0], vector3[:, 1], marker='v', c=val_label[2])
     plt.show()
 
@@ -218,7 +227,7 @@ if __name__ == "__main__":
         torch.save(val_label, './result/val_label')
         torch.save(val_vector, './result/val_vector')
 
-    # visulization(val_binary,val_label)
+    visulization(val_binary, val_label)
 
     train_binary = train_binary.cpu().numpy()
     train_binary = np.asarray(train_binary, np.int32)
@@ -226,12 +235,13 @@ if __name__ == "__main__":
     val_binary = val_binary.cpu().numpy()
     val_binary = np.asarray(val_binary, np.int32)
     val_label = val_label.cpu().numpy()
-    for i in range(3):
-        tst_binary = val_binary[i]
-        tst_label = val_label[i]
-        for j in range(3):
-            trn_binary = train_binary[j]
-            trn_label = train_label[j]
-            evaluate(trn_binary, trn_label, tst_binary, tst_label)
-
+    # evaluate(train_binary, train_label, val_binary, val_label)
+    # for i in range(3):
+    #     tst_binary = val_binary[i]
+    #     tst_label = val_label[i]
+    #     for j in range(3):
+    #         trn_binary = train_binary[j]
+    #         trn_label = train_label[j]
+    #         evaluate(trn_binary, trn_label, tst_binary, tst_label)
+    #
 
