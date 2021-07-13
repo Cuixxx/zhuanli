@@ -19,24 +19,26 @@ parser.add_argument('--pretrained', type=float, default=1, metavar='pretrained_m
                     help='loading pretrained model(default = None)')
 parser.add_argument('--bits', type=int, default=64, metavar='bts',
                     help='binary bits')
-parser.add_argument('--model', type=str, default='./models/07-01-11:12_RSIR/63.pth.tar', metavar='bts',
+parser.add_argument('--model', type=str, default='./models/07-13-15:01_RSIR/63.pth.tar', metavar='bts',
                     help='model path')
 args = parser.parse_args()
 
 
 def load_data(path):
-    norm_mean = [0.5, 0.5, 0.5]
-    norm_std = [0.5, 0.5, 0.5]
-    transform = transforms.Compose([
+    transform1 = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize(norm_mean, norm_std)]
+        transforms.Normalize([0.5, 0.5, 0.5, 0.5], [0.5, 0.5, 0.5, 0.5])]
     )  # 归一化[-1,1]
-    trainset = data.train_dataset(path, transform=transform)
+    transform2 = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize([0.5], [0.5])]
+    )  # 归一化[-1,1]
+    trainset = data.train_dataset(path, transform1=transform1,transform2=transform2)
     tpath_list = np.stack((trainset.image2_list, trainset.image3_list, trainset.image1_list), 0)#gf1_mul,gf2_mul,gf1_pan,
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=100,
                                               shuffle=False, num_workers=4)
 
-    valset = data.validation_dataset(path, transform=transform)
+    valset = data.validation_dataset(path, transform1=transform1,transform2=transform2)
     vpath_list = np.stack((valset.image2_list, valset.image3_list, valset.image1_list), 0)
     valloader = torch.utils.data.DataLoader(valset, batch_size=100, shuffle = False, num_workers=4)#100
 
@@ -50,8 +52,6 @@ def catfunc(hash_code, label, vector, input1, input2, input3):
     hash_code = torch.cat((hash_code, input1), 0)
     label = torch.cat((label, input2), 0)
     vector = torch.cat((vector, input3), 0)
-
-
     return hash_code, label, vector
 
 def binary_output(dataloader, model_path, model=None):
@@ -102,10 +102,10 @@ def evaluate(trn_binary, trn_label, tst_binary, tst_label, K=10):
     # tst_binary = np.concatenate((tst_binary[0], tst_binary[1], tst_binary[2]), axis=0)
     # tst_label = np.concatenate((tst_label[0], tst_label[1], tst_label[2]), axis=0)
 
-    trn_binary = trn_binary[1]
-    trn_label = trn_label[1]
-    tst_binary = tst_binary[1]
-    tst_label = tst_label[1]
+    # trn_binary = trn_binary[1]
+    # trn_label = trn_label[1]
+    # tst_binary = tst_binary[1]
+    # tst_label = tst_label[1]
 
     # for i in range(classes):
     #     if i == 0:
@@ -190,7 +190,8 @@ def visulization(val_vector,val_label):
 
 
 if __name__ == "__main__":
-    path = '/media/2T/cuican/code/Pytorch_RSIR/gf1gf2'
+    # path = '/media/2T/cuican/code/Pytorch_RSIR/gf1gf2'
+    path = '/media/2T/cc/salayidin/S/gf1gf2'
     if os.path.exists('./result/train_binary') and os.path.exists('./result/train_label')\
             and os.path.exists('./result/val_binary') and os.path.exists('./result/val_label')\
             and os.path.exists('./result/train_vector')and os.path.exists('./result/val_vector'):
@@ -227,7 +228,7 @@ if __name__ == "__main__":
         torch.save(val_label, './result/val_label')
         torch.save(val_vector, './result/val_vector')
 
-    visulization(val_binary, val_label)
+    # visulization(val_binary, val_label)
 
     train_binary = train_binary.cpu().numpy()
     train_binary = np.asarray(train_binary, np.int32)
@@ -236,12 +237,12 @@ if __name__ == "__main__":
     val_binary = np.asarray(val_binary, np.int32)
     val_label = val_label.cpu().numpy()
     # evaluate(train_binary, train_label, val_binary, val_label)
-    # for i in range(3):
-    #     tst_binary = val_binary[i]
-    #     tst_label = val_label[i]
-    #     for j in range(3):
-    #         trn_binary = train_binary[j]
-    #         trn_label = train_label[j]
-    #         evaluate(trn_binary, trn_label, tst_binary, tst_label)
-    #
+    for i in range(3):
+        tst_binary = val_binary[i]
+        tst_label = val_label[i]
+        for j in range(3):
+            trn_binary = train_binary[j]
+            trn_label = train_label[j]
+            evaluate(trn_binary, trn_label, tst_binary, tst_label)
+
 

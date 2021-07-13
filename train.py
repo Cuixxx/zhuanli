@@ -17,7 +17,7 @@ import time
 #通过命令行修改超参
 
 parser = argparse.ArgumentParser(description='RSIR')
-parser.add_argument('--lr', type=float, default=0.00005, metavar='LR',
+parser.add_argument('--lr', type=float, default=0.00005, metavar='LR',#0.0009
                     help='learning rate (default: 0.01)')
 parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
                     help='SGD momentum (default: 0.9)')
@@ -57,28 +57,53 @@ class my_tensorboarx(object):
 
 
 def init_dataset(path):
-    norm_mean = [0.5, 0.5, 0.5]
-    norm_std = [0.5, 0.5, 0.5]
-    transform = transforms.Compose([
+    transform1 = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize(norm_mean, norm_std)]
+        transforms.Normalize([0.5, 0.5, 0.5, 0.5], [0.5, 0.5, 0.5, 0.5])]
     )  # 归一化[-1,1]
-    train_ds1 = data.gf1_mul_Dataset(data_path=path, transform=transform)
+    transform2 = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize([0.5], [0.5])]
+    )  # 归一化[-1,1]
+    train_ds1 = data.gf1_mul_Dataset(data_path=path, transform=transform1)
     train_loader1 = data.DataLoader(train_ds1, batch_size=16, shuffle=True, num_workers=8,drop_last=True)
 
-    train_ds2 = data.gf2_mul_Dataset(data_path=path, transform=transform)
+    train_ds2 = data.gf2_mul_Dataset(data_path=path, transform=transform1)
     train_loader2 = data.DataLoader(train_ds2, batch_size=16, shuffle=True, num_workers=8,drop_last=True)
 
-    train_ds3 = data.gf1_pan_Dataset(data_path=path, transform=transform)
+    train_ds3 = data.gf1_pan_Dataset(data_path=path, transform=transform2)
     train_loader3 = data.DataLoader(train_ds3, batch_size=16, shuffle=True, num_workers=8,drop_last=True)
 
     return train_loader1, train_loader2, train_loader3
 
-
-
-
-
+"""
 def loss_function(catlabel,hash_code,gama=5,l = 0.1):#catlabel: 3n*1 hash_code:3n*64
+    length = len(hash_code)
+    label = torch.zeros(length,4).scatter_(1,catlabel.reshape(-1,1),1)
+    label = label.cuda()
+    #label = torch.nn.functional.one_hot(torch.tensor(catlabel), num_classes=4)
+    A = torch.tensor([torch.matmul(a, a.reshape(-1, 1)) for a in hash_code]).cuda()
+    B = torch.matmul(hash_code, hash_code.t()).cuda()
+    C = A.expand(length, length).cuda()
+    dis_matrix = torch.abs(C+C.t()-2*B)
+    # view = (dis_matrix).detach().cpu().numpy()
+    mask = torch.triu(torch.ones(length, length), diagonal=1).cuda()#上三角矩阵
+    dis_matrix = dis_matrix*mask
+
+    S = torch.matmul(label, label.t()).cuda()
+    S_mask = S*mask
+
+    cauchy = lambda x: gama/(x+gama)
+    cauchy_matrix1 = cauchy(dis_matrix)*S_mask+(1-S_mask)
+    cauchy_matrix1=torch.clamp(cauchy_matrix1, min=0.0001, max=0.9999)
+    cauchy_matrix2 = 1-cauchy(dis_matrix*(1-S_mask))+(1-(1-S_mask)*mask)
+    cauchy_matrix2 = torch.clamp(cauchy_matrix2, min=0.0001, max=0.9999)
+    q_loss = torch.mean((torch.abs(hash_code)-1)*(torch.abs(hash_code)-1))#是hash_code接近-1，1减少舍入误差
+    loss = -(torch.sum(torch.log(cauchy_matrix1))+torch.sum(torch.log(cauchy_matrix2)))/(length*(1+length)/2)+l*q_loss
+    return loss
+
+"""
+def loss_function(catlabel,hash_code,gama=0.1,l = 0.1,margin=5):#catlabel: 3n*1 hash_code:3n*64
     length = len(hash_code)
     label = torch.zeros(length,4).scatter_(1,catlabel.reshape(-1,1),1)
     label = label.cuda()
@@ -93,15 +118,20 @@ def loss_function(catlabel,hash_code,gama=5,l = 0.1):#catlabel: 3n*1 hash_code:3
 
     S = torch.matmul(label,label.t()).cuda()
     S_mask = S*mask
-
-    cauchy = lambda x: gama/(x+gama)
-    cauchy_matrix1 = cauchy(dis_matrix)*S_mask+(1-S_mask)
-    cauchy_matrix1=torch.clamp(cauchy_matrix1, min=0.0001, max=0.9999)
-    cauchy_matrix2 = 1-cauchy(dis_matrix*(1-S_mask))+(1-(1-S_mask)*mask)
-    cauchy_matrix2 = torch.clamp(cauchy_matrix2, min=0.0001, max=0.9999)
+    nS_mask = (1-S)*mask
+    # cauchy = lambda x: gama/(x+gama)
+    cauchy_matrix1 = torch.exp(-gama*dis_matrix)*S_mask+(1-S_mask)
+    # print(torch.min(cauchy_matrix1))
+    # cauchy_matrix1=torch.clamp(cauchy_matrix1, min=0.0001, max=0.9999)
+    cauchy_matrix2 = torch.sigmoid(dis_matrix-margin)*nS_mask+(1-nS_mask)
+    # print(torch.min(cauchy_matrix2))
+    # cauchy_matrix2 = torch.clamp(cauchy_matrix2, min=0.0001, max=0.9999)
     q_loss = torch.mean((torch.abs(hash_code)-1)*(torch.abs(hash_code)-1))#是hash_code接近-1，1减少舍入误差
-    loss = -(torch.sum(torch.log(cauchy_matrix1))+torch.sum(torch.log(cauchy_matrix2)))/(length*(1+length)/2)+l*q_loss
+    f1 = S_mask.sum()
+    f2 = nS_mask.sum()
+    loss = -(torch.sum(torch.log(cauchy_matrix1))/f1+torch.sum(torch.log(cauchy_matrix2))/f2)+l*q_loss
     return loss
+
 
 def train():
     print('\nEpoch :%d' % epoch)
@@ -114,7 +144,7 @@ def train():
             img3 = img3.cuda()
             cat_label = torch.cat((label1, label2, label3), dim=0)
             _, hash_code = model(img1, img2, img3)
-            loss = loss_function(cat_label, hash_code)
+            loss = loss_function(cat_label, hash_code, margin=1+5*(1-np.exp(-0.1*epoch)))
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -123,9 +153,11 @@ def train():
             pbar.update(1)
         pbar.close()
         return train_loss/(index+1)
+
 if __name__ == '__main__':
-    os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
-    path = '/media/2T/cuican/code/Pytorch_RSIR/gf1gf2'
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
+    # path = '/media/2T/cuican/code/Pytorch_RSIR/gf1gf2'
+    path = '/media/2T/cc/salayidin/S/gf1gf2'
     trainloader1, trainloader2, trainloader3 = init_dataset(path)
 
     model = network.MyModel()
@@ -139,7 +171,6 @@ if __name__ == '__main__':
     now = time.strftime("%m-%d-%H:%M", time.localtime(time.time()))
     model_name = now+'_RSIR'
     tensorboard = my_tensorboarx(log_dir='./tensorboard_data', file_name=model_name)
-
     for epoch in range(start_epoch, start_epoch + args.epoch):
         loss = train()
         scheduler.step(epoch)

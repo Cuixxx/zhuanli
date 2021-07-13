@@ -18,9 +18,9 @@ class SpacialNet(nn.Module):
         self.features = nn.Sequential(*list(alexnet_model.features.children()))
 
         self.FC = nn.Sequential(nn.Linear(9216, 1024),
-                                        nn.ReLU(),
+                                        nn.LeakyReLU(0.2, True),
                                         nn.Linear(1024, 1024),
-                                        nn.ReLU())
+                                        nn.LeakyReLU(0.2, True))
 
     def forward(self, x):
         #空间特征
@@ -126,9 +126,9 @@ class MyModel(nn.Module):
         super().__init__()
         self.Spacial_Net = SpacialNet()
         self.PAN_Net = SpacialNet_Pan()
-        self.hash = nn.Sequential(nn.Linear(1024, 1024), nn.ReLU(), nn.Linear(1024, 64), nn.Tanh()).cuda()
-        self.MergeLayer_gf1 = nn.Sequential(nn.Conv2d(4, 3, 1, 1, 0), nn.LeakyReLU(0.2, True))
-        self.MergeLayer_gf2 = nn.Sequential(nn.Conv2d(4, 3, 1, 1, 0), nn.LeakyReLU(0.2, True))
+        self.hash = nn.Sequential(nn.Linear(1024, 64), nn.Tanh()).cuda()
+        self.MergeLayer_gf1 = nn.Sequential(nn.Conv2d(4, 3, 1, 1, 0), nn.LeakyReLU(0.2, True), nn.Conv2d(3, 3, 1, 1, 0), nn.LeakyReLU(0.2, True))
+        self.MergeLayer_gf2 = nn.Sequential(nn.Conv2d(4, 3, 1, 1, 0), nn.LeakyReLU(0.2, True), nn.Conv2d(3, 3, 1, 1, 0), nn.LeakyReLU(0.2, True))
 
     def forward(self, img1, img2, img3):#img1 GF1 mul,img2 GF2 mul,img3 GF1 pan
         Merge_feat1 = self.MergeLayer_gf1(img1)
@@ -142,22 +142,6 @@ class MyModel(nn.Module):
         cat_vector = torch.cat((Mul_feat1, Mul_feat2, pan_feat), dim=0)
         hash_code = self.hash(cat_vector)
         return cat_vector, hash_code#(-1,1)
-
-    # def forward(self, spacial_img, spectral_vector, img_pan, state):
-    #     if state == 0: #训练
-    #         spacial_vector = self.net1(spacial_img)
-    #         mixed_vector = self.net2(spectral_vector, spacial_vector)
-    #         pan_vector = self.net3(img_pan)
-    #         cat_vector = torch.cat((mixed_vector, pan_vector), dim=0)
-    #         hash_code = self.hash(cat_vector)
-    #     elif state == 1: #校验输入mul
-    #         spacial_vector = self.net1(spacial_img)
-    #         mixed_vector = self.net2(spectral_vector, spacial_vector)
-    #         hash_code = self.hash(mixed_vector)
-    #     elif state == 2:#校验输入pan
-    #         pan_vector = self.net3(img_pan)
-    #         hash_code = self.hash(pan_vector)
-    #     return hash_code#(-1,1)
 
 
 if __name__ == '__main__':

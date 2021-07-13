@@ -5,6 +5,8 @@ import cv2
 import random
 import PIL.Image as Image
 import datetime
+from torchvision import datasets, transforms
+
 #各个数据集的均值
 VGG_MEAN2 = [63.776633, 77.412891, 99.045335 , 65.075620]
 VGG_MEAN = [90.930974, 107.563677, 109.988508 , 85.771360]  # RGBN
@@ -18,7 +20,7 @@ class gf1_mul_Dataset(Dataset):
         gf1_mul_list = os.listdir(data_path+'/gf1_mul/train')
         self.image_list = []#gf1_mul
         self.label_list = []
-        for i in gf1_mul_list:
+        for i in range(len(gf1_mul_list)):
             path = data_path+'/gf1_mul/train'+'/{}'.format(i)
             name_list = os.listdir(path)
             for _, item in enumerate(name_list):
@@ -44,7 +46,7 @@ class gf2_mul_Dataset(Dataset):
         gf2_mul_list = os.listdir(data_path+'/gf2_mul/train')
         self.image_list = []  # gf2_mul
         self.label_list = []
-        for i in gf2_mul_list:
+        for i in range(len(gf2_mul_list)):
             path = data_path+'/gf2_mul/train' + '/{}'.format(i)
             name_list = os.listdir(path)
             for _, item in enumerate(name_list):
@@ -71,7 +73,7 @@ class gf1_pan_Dataset(Dataset):
         gf1_pan_list = os.listdir(data_path+'/gf1_pan/train')
         self.image_list = []  # gf1_pan
         self.label_list = []
-        for i in gf1_pan_list:
+        for i in range(len(gf1_pan_list)):
             path = data_path+'/gf1_pan/train'+'/{}'.format(i)
             name_list = os.listdir(path)
             for _,item in enumerate(name_list):
@@ -117,7 +119,7 @@ def shuffel_list(img_list, img_label):
 
 
 class train_dataset(Dataset):
-    def __init__(self, data_path, transform = None):
+    def __init__(self, data_path, transform1 = None,transform2 = None):
         gf1_pan_list = os.listdir(data_path+'/gf1_pan/train')
         gf1_pan_list.sort(key = lambda x: int(x))
         gf1_mul_list = os.listdir(data_path+'/gf1_mul/train')
@@ -128,7 +130,8 @@ class train_dataset(Dataset):
         self.image1_list, self.label1_list = get_list(gf1_pan_list, data_path + '/gf1_pan/train')
         self.image2_list, self.label2_list = get_list(gf1_mul_list, data_path + '/gf1_mul/train')
         self.image3_list, self.label3_list = get_list(gf2_mul_list, data_path + '/gf2_mul/train')
-        self.transform = transform
+        self.transform1 = transform1
+        self.transform2 = transform2
         self.len = len(self.image1_list)
 
     def __getitem__(self, index):
@@ -149,10 +152,12 @@ class train_dataset(Dataset):
         image2 = Image.fromarray(image2)
         image3 = Image.fromarray(image3)
 
-        if self.transform:
-            image1 = self.transform(image1)
-            image2 = self.transform(image2)
-            image3 = self.transform(image3)
+        if self.transform2:
+            image1 = self.transform2(image1)
+
+        if self.transform1:
+            image2 = self.transform1(image2)
+            image3 = self.transform1(image3)
 
 
         return [image1, image2, image3], (label1, label2, label3)
@@ -162,7 +167,7 @@ class train_dataset(Dataset):
 
 
 class validation_dataset(Dataset):
-    def __init__(self, data_path, transform):
+    def __init__(self, data_path, transform1 = None,transform2 = None):
         gf1_pan_list = os.listdir(data_path+'/gf1_pan/val')
         gf1_mul_list = os.listdir(data_path+'/gf1_mul/val')
         gf2_mul_list = os.listdir(data_path + '/gf2_mul/val')
@@ -171,7 +176,8 @@ class validation_dataset(Dataset):
         self.image2_list, self.label2_list = get_list(gf1_mul_list, data_path + '/gf1_mul/val')
         self.image3_list, self.label3_list = get_list(gf2_mul_list, data_path + '/gf2_mul/val')
         self.len = len(self.image1_list)
-        self.transform = transform
+        self.transform1 = transform1
+        self.transform2 = transform2
         # self.counter = 0
 
     def __getitem__(self, index):
@@ -191,10 +197,11 @@ class validation_dataset(Dataset):
         image2 = Image.fromarray(image2)
         image3 = Image.fromarray(image3)
 
-        if self.transform:
-            image1 = self.transform(image1)
-            image2 = self.transform(image2)
-            image3 = self.transform(image3)
+        if self.transform1:
+            image2 = self.transform1(image2)
+            image3 = self.transform1(image3)
+        if self.transform2:
+            image1 = self.transform2(image1)
 
         return [image1, image2, image3], (label1, label2, label3)
 
@@ -218,14 +225,22 @@ def init_dataset(path):
     return train_loader
 
 if __name__ == '__main__':
+    print('hello')
+    norm_mean = [0.5]
+    norm_std = [0.5]
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(norm_mean, norm_std)]
+    )  # 归一化[-1,1]
 
-    # path = '/media/2T/cc/salayidin/S/gf1gf2'
-    path = '/media/2T/cuican/code/Pytorch_RSIR/gf1gf2'
-    # tds = train_dataset(data_path=path)
+    path = '/media/2T/cc/salayidin/S/gf1gf2'
+    # path = '/media/2T/cuican/code/Pytorch_RSIR/gf1gf2'
+    tds = gf1_pan_Dataset(data_path=path,transform=transform)
     # transform = transforms.Compose([transforms.Resize(227)])
     # vds = validation_dataset(data_path=path)
     train_loader = DataLoader(tds, batch_size=256, shuffle=True, num_workers=4)
     for (img,label) in train_loader:
+
         img = img.cuda()
         label = label.cuda()
         print("hello")
